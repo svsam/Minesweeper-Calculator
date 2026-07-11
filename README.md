@@ -1,151 +1,108 @@
-# Minesweeper Calculator
+# Minesweeper AI Solver
 
-Minesweeper Calculator is a desktop Python project that combines a playable **Minesweeper game** with a **probability-based solving assistant**. Instead of only letting you click tiles and place flags, the project can also analyze the current board, estimate which hidden cells are safest or most dangerous, and help you make smarter moves.
+Minesweeper AI Solver is a playable desktop Minesweeper game with a built-in probability assistant. You can play it like normal Minesweeper, or you can ask the solver to inspect the board, show mine probabilities, make certain moves, and step through decisions.
 
-It is built with **Pygame** for the user interface and uses **SymPy** plus combinatorics-based logic in the solver to reason about mine placement probabilities. The result is a project that is part game, part puzzle-analysis tool, and part learning resource for people interested in logic, probability, or algorithmic problem solving.
+The project is written in Python with Pygame for the interface. The solving logic uses the visible numbers on the board to build constraints, work out safe cells and mine cells, and estimate risk when the board cannot be solved by certainty alone.
 
----
+## What You Can Do
 
-## What this project does
+- Play a full Minesweeper game with left-click reveal and right-click flag controls.
+- Ask the solver to display mine probabilities on hidden cells.
+- Automatically reveal cells that are guaranteed safe.
+- Automatically flag cells that are guaranteed mines.
+- Step the AI forward one move at a time.
+- Let the AI auto-solve until it wins, loses, or reaches an unavoidable guess.
+- Detect unavoidable 50/50 situations and pause instead of pretending the move is logical.
+- Change the music volume and board size in the Options screen.
+- Reset the board at any time.
 
-At its core, this project gives you a graphical Minesweeper experience with a few extra features:
+## Game States
 
-- **Generates a Minesweeper board** with a configurable width, height, and number of mines.
-- **Lets you play interactively** using left-clicks to reveal tiles and right-clicks to place or remove flags.
-- **Automatically clears empty regions** when a `0` tile is revealed, similar to classic Minesweeper behavior.
-- **Calculates mine probabilities** for unrevealed tiles when requested.
-- **Highlights certainty** by identifying tiles that are definitely safe or definitely mines.
-- **Displays simple performance stats** such as FPS and CPU usage while the game runs.
-- **Includes menu screens and music controls** for a more complete desktop-app feel.
+### Fresh Board
 
-This makes the project useful both as a game and as a basic solver/assistant for understanding how Minesweeper positions can be analyzed mathematically.
+When a new game starts, every tile is hidden and the solver panel shows the current mine count, flag count, and available controls.
 
----
+![Fresh game board](image.png)
 
-## How it helps people
+### Solved Board
 
-This project can help different kinds of users in different ways:
+When every safe tile has been revealed and every mine is accounted for, the game marks the board as won. The screenshot below shows the solver finishing a board with all 20 mines flagged.
 
-### For players
-- Helps you make better decisions when a Minesweeper board becomes uncertain.
-- Shows probability estimates so you can choose the safest move instead of guessing blindly.
-- Makes classic Minesweeper more approachable for beginners.
+![Solved winning board](wincondition.png)
 
-### For students and learners
-- Demonstrates how logic constraints can be turned into equations.
-- Shows a practical use of **linear algebra**, **symbolic math**, and **combinatorics**.
-- Provides a concrete example of how probability can be used in game-solving.
+### Lost Board
 
-### For developers
-- Offers a small but interesting Python codebase combining gameplay, rendering, and solver logic.
-- Shows how to structure a simple Pygame application with helper modules.
-- Can be extended into a stronger AI/solver, a teaching tool, or a polished desktop game.
+If the player or AI reveals a mine, the game ends and the mine layout is shown. This can happen when the solver has to take a real risk, or when a manual click hits a mine.
 
-### For educators or hobbyists
-- Can be used to explain the difference between **certainty** and **probability** in decision making.
-- Gives a visual way to demonstrate how local rules and global constraints interact.
+![AI losing board](AIlosingcondition.png)
 
----
+## How The Program Works
 
-## Main features
+The program has three main parts:
 
-### 1. Playable Minesweeper interface
-The game starts in a menu screen and lets you launch a board-based Minesweeper session. The interface includes:
+- `start.py` runs the Pygame window, menus, buttons, options screen, music, and main game loop.
+- `visual.py` loads the tile images and draws the board.
+- `functions.py` creates boards, reveals tiles, checks win/loss state, and calculates solver probabilities.
 
-- Start button
-- Options screen
-- Back button
-- Music toggle
-- FPS / CPU display
+During a game, the board keeps track of three things:
 
-### 2. Probability calculator / solver assistant
-A major feature of the project is the mine-probability engine. When the board reaches an uncertain state, the solver can:
+- where the mines are internally
+- what the player can currently see
+- which hidden cells have been flagged
 
-- Look at revealed numbered tiles
-- Determine surrounding unknown cells
-- Apply direct deduction rules
-- Build a system of constraints
-- Use symbolic solving to find valid mine combinations
-- Estimate the probability that each hidden tile contains a mine
+When you reveal a tile, the game checks whether it is a mine. If it is safe, the tile opens. If the tile is a `0`, nearby empty areas open automatically, like classic Minesweeper.
 
-This means the project is more than a clone of Minesweeper—it actively helps analyze the puzzle.
+## How The Solver Thinks
 
-### 3. Automatic clearing of empty areas
-When a `0` tile is uncovered, the project reveals nearby empty sections automatically so the player does not have to click every empty square one by one.
+The solver starts with simple Minesweeper logic. For each revealed number, it looks at the hidden cells around it and asks:
 
-### 4. Audio and visual assets
-The game includes image assets for:
+- Are all remaining hidden neighbours definitely mines?
+- Are all required mines already flagged, making the rest safe?
 
-- hidden tiles
-- flags
-- mines
-- number tiles
-- window icon
+If certainty is not enough, the solver builds a set of constraints from the visible numbers. Each numbered tile says something like, "these nearby hidden cells must contain exactly this many mines." The solver compares those rules across the board and counts the valid mine layouts that still fit.
 
-It also includes background music for the game session.
+From those valid layouts, it estimates the probability that each hidden cell contains a mine. A cell with `0%` is safe. A cell with `100%` is a mine. Anything in between is risk.
 
----
+If the exact solver finds that every available move is equally risky at `50%`, and there is no logical way to do better, the game warns about an unavoidable 50/50 and pauses auto-solving.
 
-## How the solver works at a high level
+## Controls
 
-The "calculator" part of the project is implemented in the logic module and follows a layered approach:
+### Mouse
 
-1. **Basic deduction**  
-   If a number tile has exactly as many unknown neighbors as remaining mines, those neighbors must be mines. Likewise, if all needed mines are already accounted for, the rest must be safe.
+- Left-click: reveal a tile
+- Right-click: place or remove a flag
 
-2. **Border analysis**  
-   The solver focuses on unknown cells near revealed numbered tiles, because those are the cells constrained by visible information.
+### Keyboard
 
-3. **Equation building**  
-   Each numbered tile creates a relationship between nearby unknown cells and the number of mines still required around it.
+- `P`: show probabilities
+- `L`: hide probabilities
+- `C`: make all certain moves
+- `S`: run one AI step
+- `A`: start or pause auto-solve
+- `R`: reset the board
+- `Escape`: go back from the game or Options screen
 
-4. **Symbolic solving**  
-   The project uses SymPy to solve the resulting system.
+### On-Screen Buttons
 
-5. **Combinatorial counting**  
-   When multiple valid mine layouts remain, the project counts possibilities and converts them into per-tile mine probabilities.
+- `Probabilities`: calculate and display mine chances
+- `Certain Moves`: reveal guaranteed safe cells and flag guaranteed mines
+- `AI Step`: make one solver move
+- `Auto Solve`: let the solver keep playing
+- `Reset Board`: start over with a new board
+- `Back`: return to the main menu
 
-This makes the project especially interesting if you want to explore how a game can be solved using formal reasoning rather than only heuristics.
+## Options
 
----
+The Options screen lets you adjust:
 
-## Project structure
+- music volume
+- square board size from `6 x 6` to `16 x 16`
 
-```text
-Minesweeper-Calculator/
-├── README.md
-├── minesweeper/
-│   ├── start.py          # Main game loop, menus, controls, and runtime setup
-│   ├── functions.py      # Board generation, reveal logic, and probability solver
-│   ├── visual.py         # Rendering logic and image loading
-│   ├── images/           # Sprites/icons for tiles, flags, mines, and numbers
-│   ├── FirelinkShrine.mp3
-│   └── old/              # Older experimental files / legacy code
-```
+The board scales automatically when the size changes. Mine count also scales with the selected board size.
 
----
+## Running The Game
 
-## Requirements
-
-You will need Python 3 installed, plus these Python packages:
-
-- `pygame`
-- `psutil`
-- `sympy`
-
-Install them with:
-
-```bash
-pip install pygame psutil sympy
-```
-
-If you are on Linux, you may also need the usual SDL/Pygame-related system libraries depending on your environment.
-
----
-
-## How to run the project
-
-From the repository root, run:
+From the project folder, run:
 
 ```bash
 python minesweeper/start.py
@@ -157,146 +114,53 @@ If your system uses `python3`, run:
 python3 minesweeper/start.py
 ```
 
----
+There is also a built Windows executable in the project root:
 
-## Controls
+```text
+game.exe
+```
 
-### Mouse
-- **Left-click**: reveal a tile
-- **Right-click**: place or remove a flag
+## Requirements
 
-### Keyboard
-- **P**: calculate and display mine probabilities
-- **L**: hide probability overlay
-- **C**: automatically act on certainty
-  - reveals tiles with probability `0.0`
-  - flags tiles with probability `1.0`
-- **S**: perform one AI solver step
-- **A**: start or pause automatic solving
-- **R**: reset the board
+Install the required Python packages with:
 
-When the exact solver reaches an unavoidable 50/50 with no safer move, automatic solving pauses and the affected cells are highlighted in orange.
+```bash
+pip install pygame-ce psutil sympy
+```
 
-### Menu actions
-- **Start**: begin the game
-- **Options**: open the options screen
-  - adjust music volume
-  - choose a square board size from `6 x 6` to `16 x 16`
-- **Music**: pause or resume the background music
-- **Back**: return from sub-screens
-- **Escape**: return from the game or Options screen
-- **Quit / close window**: exit the application
+`pygame-ce` is used as the Pygame-compatible package for the local environment.
 
----
+## Project Layout
 
-## Current default board settings
+```text
+Minesweeper-Calculator/
+|-- README.md
+|-- game.exe
+|-- image.png
+|-- wincondition.png
+|-- AIlosingcondition.png
+|-- minesweeper/
+|   |-- start.py
+|   |-- functions.py
+|   |-- visual.py
+|   |-- FirelinkShrine.mp3
+|   `-- images/
+`-- env/
+```
 
-The default configuration in the game sets:
+## Why This Project Is Interesting
 
-- **Height:** 10
-- **Width:** 10
-- **Mines:** 20
+Minesweeper looks simple, but it is really a game about incomplete information. Sometimes the board gives you a clear logical answer. Sometimes it only gives you risk.
 
-The Options screen can change the square board size. Tile dimensions and mine count scale automatically with the selected size.
-
----
-
-## Example ways to use it
-
-Here are a few practical uses for the project:
-
-### Use it as a normal game
-If you just want to play Minesweeper with some extra polish, launch the app and play normally.
-
-### Use it as a decision-support tool
-When you reach a difficult board state:
-
-1. press `P`
-2. inspect the probability values
-3. choose the lowest-risk tile
-4. optionally press `C` to apply guaranteed moves automatically
-
-You can also press `S` for one complete solver step or `A` to let the solver continue automatically. Automatic solving pauses instead of guessing when it detects an exact unavoidable 50/50.
-
-### Use it as a learning project
-Read through the code to study:
-
-- board generation
-- recursive-style clearing behavior
-- Pygame rendering
-- constraint-based puzzle solving
-- symbolic equation solving with SymPy
-
----
-
-## Why the project matters
-
-Minesweeper is a deceptively simple game. Under the surface, it involves:
-
-- local logic rules
-- incomplete information
-- uncertainty
-- risk management
-- mathematical reasoning
-
-This project helps turn those ideas into something visible and interactive. It can help people understand that solving a puzzle is not always about finding one exact answer immediately—sometimes it is about narrowing possibilities, measuring risk, and making the best decision with the information available.
-
-That makes this project valuable not just as entertainment, but also as a small educational tool.
-
----
-
-## Known limitations / things to improve
-
-Like many personal or experimental projects, this codebase has room to grow. Potential improvements include:
-
-- adding a `requirements.txt` or `pyproject.toml`
-- saving option choices between application launches
-- adding named difficulty presets in addition to the board-size slider
-- improving comments, docstrings, and code organization
-- packaging the game for easier installation
-- adding automated tests
-
-If you want to contribute, these would all be strong next steps.
-
----
+This project makes that difference visible. It shows when a move is guaranteed, when a move is only probably safe, and when the board has reached a true guess. That makes it useful as a game, a small AI project, and a readable example of probability-based problem solving in Python.
 
 ## Troubleshooting
 
-### The game does not start
-Make sure all required packages are installed:
+If the game does not start, make sure the dependencies are installed in the environment you are using.
 
-```bash
-pip install pygame psutil sympy
-```
+If images or music do not load, check that these paths still exist:
 
-### Images or music do not load
-Check that the `minesweeper/images` folder and `minesweeper/FirelinkShrine.mp3` file are present.
+- `minesweeper/images`
+- `minesweeper/FirelinkShrine.mp3`
 
-### Pygame window issues
-Some environments (especially remote servers, headless systems, or restricted containers) may not support opening desktop windows directly.
-
----
-
-## Future ideas
-
-Possible directions for expanding the project:
-
-- add difficulty presets such as beginner / intermediate / expert
-- add a hint button
-- color-code probabilities visually
-- save statistics from completed runs
-- add a tutorial mode explaining why a move is safe
-- turn the code into a cleaner educational demo for logic and probability
-
----
-
-## Summary
-
-**Minesweeper Calculator** is a Python-based Minesweeper game with an integrated solver assistant. It helps people:
-
-- play Minesweeper
-- understand risk on uncertain boards
-- learn logic and probability concepts
-- explore how symbolic math can support puzzle solving
-
-If you enjoy games, programming, or mathematical problem solving, this project is a great starting point for experimentation and improvement.
+If the Pygame window does not open, the program may be running in an environment that does not support desktop windows.
