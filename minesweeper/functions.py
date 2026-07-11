@@ -70,7 +70,7 @@ def cleanboard(knownBoard,gameBoard,seen):
             for x, c in enumerate(r):
                 if c == 0 and (y, x) not in seen:
                     for sqr in cSurroundingTiles((y, x), gameBoard):
-                        if gameBoard[sqr[0]][sqr[1]] == 0:
+                        if gameBoard[sqr[0]][sqr[1]] == 0 and knownBoard[sqr[0]][sqr[1]] != 'B':
                             sqrNum = squareNum(sqr, gameBoard)
                             if sqrNum == 0:
                                 count += 1
@@ -80,6 +80,135 @@ def cleanboard(knownBoard,gameBoard,seen):
                     seen.append((y, x))
         for sqr in zerosqrs:
             knownBoard[sqr[0]][sqr[1]] = 0
+
+
+def countFlags(knownBoard):
+    return sum(cell == 'B' for row in knownBoard for cell in row)
+
+
+def validateBoardState(knownBoard, numberOfMines):
+    flags = countFlags(knownBoard)
+    unknowns = sum(cell is None for row in knownBoard for cell in row)
+
+    if flags > numberOfMines:
+        return "Too many flags have been placed"
+    if flags + unknowns < numberOfMines:
+        return "There are not enough hidden squares for the remaining mines"
+
+    for y, row in enumerate(knownBoard):
+        for x, cell in enumerate(row):
+            if type(cell) is not int:
+                continue
+
+            surrounding = cSurroundingTiles((y, x), knownBoard)
+            surrounding_flags = sum(knownBoard[ny][nx] == 'B' for ny, nx in surrounding)
+            surrounding_unknowns = sum(knownBoard[ny][nx] is None for ny, nx in surrounding)
+            if surrounding_flags > cell or surrounding_flags + surrounding_unknowns < cell:
+                return "The current flags conflict with a revealed number"
+
+    return None
+
+
+def relocateMine(gameBoard, knownBoard, coords):
+    y, x = coords
+    if gameBoard[y][x] != 1:
+        return False
+
+    for new_y, row in enumerate(gameBoard):
+        for new_x, cell in enumerate(row):
+            if cell == 0 and knownBoard[new_y][new_x] is None and (new_y, new_x) != coords:
+                gameBoard[y][x] = 0
+                gameBoard[new_y][new_x] = 1
+                return True
+
+    return False
+
+
+def revealCell(knownBoard, gameBoard, seen, coords, safeFirstMove=False):
+    if not cifInside(coords, len(gameBoard), len(gameBoard[0])):
+        return 'ignored'
+
+    y, x = coords
+    if knownBoard[y][x] is not None:
+        return 'ignored'
+
+    if safeFirstMove:
+        relocateMine(gameBoard, knownBoard, coords)
+
+    if gameBoard[y][x] == 1:
+        return 'mine'
+
+    knownBoard[y][x] = squareNum(coords, gameBoard)
+    cleanboard(knownBoard, gameBoard, seen)
+    return 'revealed'
+
+
+def hasWon(gameBoard, knownBoard):
+    return all(
+        gameBoard[y][x] == 1 or type(knownBoard[y][x]) is int
+        for y in range(len(gameBoard))
+        for x in range(len(gameBoard[0]))
+    )
+
+
+def solverActions(knownBoard, probabilityBoard, tolerance=1e-12):
+    safe = []
+    mines = []
+    candidates = []
+    center_y = (len(knownBoard) - 1) / 2
+    center_x = (len(knownBoard[0]) - 1) / 2
+
+    for y, row in enumerate(knownBoard):
+        for x, cell in enumerate(row):
+            if cell is not None or probabilityBoard[y][x] is None:
+                continue
+
+            probability = float(probabilityBoard[y][x])
+            if not math.isfinite(probability):
+                continue
+            if probability <= tolerance:
+                safe.append((y, x))
+            elif probability >= 1 - tolerance:
+                mines.append((y, x))
+            else:
+                distance = (y - center_y) ** 2 + (x - center_x) ** 2
+                candidates.append((probability, distance, y, x))
+
+    if safe or mines:
+        return safe, mines, None
+    if candidates:
+        probability, _, y, x = min(candidates)
+        return [], [], ((y, x), probability)
+    return [], [], None
+
+
+def forcedFiftyFiftyCells(knownBoard, probabilityBoard, estimated=False, tolerance=1e-9):
+    if estimated or probabilityBoard is None:
+        return []
+    if not any(type(cell) is int for row in knownBoard for cell in row):
+        return []
+
+    candidates = []
+    for y, row in enumerate(knownBoard):
+        for x, cell in enumerate(row):
+            probability = probabilityBoard[y][x]
+            if cell is None and probability is not None:
+                candidates.append(((y, x), float(probability)))
+
+    if len(candidates) < 2:
+        return []
+    if any(probability <= tolerance or probability >= 1 - tolerance for _, probability in candidates):
+        return []
+
+    safest_probability = min(probability for _, probability in candidates)
+    if abs(safest_probability - 0.5) > tolerance:
+        return []
+
+    fifty_fifty = [
+        coords for coords, probability in candidates
+        if abs(probability - 0.5) <= tolerance
+    ]
+    return fifty_fifty
 
 #generates all combinations of a list l of symbols with length n
 def foo(l,n):
@@ -115,6 +244,7 @@ def gen_groups(solution,parameters):
 
 # The function that returns a board with the probability of each border square having a mine
 def calcprobs(board,rem_mines):
+    calcprobs.used_estimate = False
     newBoard = []
     for _ in range(len(board)):
             newBoard.append([None] * len(board[0]))
@@ -240,13 +370,35 @@ def calcprobs(board,rem_mines):
         # Solves the system
         solution_set = sympy.linsolve(sympy.Matrix(equation_matrix), variables)
         if solution_set is sympy.EmptySet:
-            print("The current flags are inconsistent with the revealed squares")
             return newBoard
         solution = next(iter(solution_set))
 
         # Determines what are the parameters of the solution
         parameters = [variable for variable in variables if variable in solution.free_symbols]
-        print("Number of parameters", len(parameters))
+
+        # Exact enumeration grows exponentially. Keep exact constant deductions, then
+        # use the global remaining-mine rate for unresolved cells on complex boards.
+        if len(parameters) > 18:
+            calcprobs.used_estimate = True
+            for i, expression in enumerate(solution):
+                if expression == sympy.core.numbers.Zero:
+                    newBoard[borderSquares[i][0]][borderSquares[i][1]] = 0.0
+                elif expression == sympy.core.numbers.One:
+                    newBoard[borderSquares[i][0]][borderSquares[i][1]] = 1.0
+
+            found_mines = sum(cell == 1.0 for row in newBoard for cell in row)
+            unresolved = [
+                (y, x)
+                for y, row in enumerate(board)
+                for x, cell in enumerate(row)
+                if cell is None and not isinstance(newBoard[y][x], float)
+            ]
+            remaining = rem_mines - found_mines
+            if unresolved and 0 <= remaining <= len(unresolved):
+                estimate = remaining / len(unresolved)
+                for y, x in unresolved:
+                    newBoard[y][x] = estimate
+            return newBoard
 
         # Separates the solution in groups that are independent between each other
         groups = gen_groups(solution,parameters)
@@ -328,7 +480,7 @@ def calcprobs(board,rem_mines):
                 for sqr in unbordered_sqrs:
                     newBoard[sqr[0]][sqr[1]] = unbordered_prob
             else:
-                print("No mine placements match the current board and flag count")
+                return newBoard
         else:
             # In case there were too many parameters, at least some squares are definitely mines because the
             # solution of the linear system gave that they are constants 1 or 0
@@ -337,7 +489,6 @@ def calcprobs(board,rem_mines):
                     newBoard[borderSquares[i][0]][borderSquares[i][1]] = 0.0
                 elif solution[i] == sympy.core.numbers.One:
                     newBoard[borderSquares[i][0]][borderSquares[i][1]] = 1.0
-            print("The probability calculations were not completed because there were too many parameters")
     else:
         alreadyFoundMines = sum(cell == 1.0 for row in newBoard for cell in row)
         remaining_mines = rem_mines - alreadyFoundMines
@@ -345,5 +496,4 @@ def calcprobs(board,rem_mines):
             probability = remaining_mines / len(unbordered_sqrs)
             for y, x in unbordered_sqrs:
                 newBoard[y][x] = probability
-        print("The linear system method wasn't needed")
     return(newBoard)

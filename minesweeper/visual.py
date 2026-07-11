@@ -38,6 +38,7 @@ def blittext(screen,text,font,r,c,SQ_SIZE):
 
 
 def drawBoard(screen,board,mineboard,probboard,SQ_SIZE,status,display):
+    probability_font = pygame.font.SysFont('Arial', max(12, SQ_SIZE // 4), bold=True)
     for r in range(dimension(board)):
         for c in range(dimensionx(board)):
             val = board[r][c]
@@ -47,7 +48,7 @@ def drawBoard(screen,board,mineboard,probboard,SQ_SIZE,status,display):
                 else:
                     blitimage(screen, notpressed, r, c, SQ_SIZE, 1, 1)
                     if display and probboard is not None and probboard[r][c] is not None:
-                        blittext(screen,str(round(probboard[r][c]*100)), pygame.font.SysFont('Times New Roman',10),r,c,SQ_SIZE)
+                        blittext(screen, f"{round(probboard[r][c] * 100)}%", probability_font, r, c, SQ_SIZE)
             elif type(val) == int:
                 blitimage(screen, numbers[val], r, c, SQ_SIZE,1,1)
             elif val == 'B':

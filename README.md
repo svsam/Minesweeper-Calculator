@@ -171,25 +171,33 @@ python3 minesweeper/start.py
 - **C**: automatically act on certainty
   - reveals tiles with probability `0.0`
   - flags tiles with probability `1.0`
+- **S**: perform one AI solver step
+- **A**: start or pause automatic solving
+- **R**: reset the board
+
+When the exact solver reaches an unavoidable 50/50 with no safer move, automatic solving pauses and the affected cells are highlighted in orange.
 
 ### Menu actions
 - **Start**: begin the game
 - **Options**: open the options screen
+  - adjust music volume
+  - choose a square board size from `6 x 6` to `16 x 16`
 - **Music**: pause or resume the background music
 - **Back**: return from sub-screens
+- **Escape**: return from the game or Options screen
 - **Quit / close window**: exit the application
 
 ---
 
 ## Current default board settings
 
-The current configuration in the game sets:
+The default configuration in the game sets:
 
-- **Height:** 11
+- **Height:** 10
 - **Width:** 10
 - **Mines:** 20
 
-These values are defined in `minesweeper/start.py` and can be edited if you want to experiment with different difficulty levels.
+The Options screen can change the square board size. Tile dimensions and mine count scale automatically with the selected size.
 
 ---
 
@@ -207,6 +215,8 @@ When you reach a difficult board state:
 2. inspect the probability values
 3. choose the lowest-risk tile
 4. optionally press `C` to apply guaranteed moves automatically
+
+You can also press `S` for one complete solver step or `A` to let the solver continue automatically. Automatic solving pauses instead of guessing when it detects an exact unavoidable 50/50.
 
 ### Use it as a learning project
 Read through the code to study:
@@ -239,12 +249,9 @@ That makes this project valuable not just as entertainment, but also as a small 
 
 Like many personal or experimental projects, this codebase has room to grow. Potential improvements include:
 
-- fixing path handling to work more smoothly across operating systems
 - adding a `requirements.txt` or `pyproject.toml`
-- allowing difficulty selection in the UI
-- resetting or regenerating the board without restarting
-- improving the menu flow and back-button behavior
-- adding win detection and end-game messaging
+- saving option choices between application launches
+- adding named difficulty presets in addition to the board-size slider
 - improving comments, docstrings, and code organization
 - packaging the game for easier installation
 - adding automated tests
@@ -263,7 +270,7 @@ pip install pygame psutil sympy
 ```
 
 ### Images or music do not load
-Check that you are running the project from the repository root so the relative asset paths resolve correctly.
+Check that the `minesweeper/images` folder and `minesweeper/FirelinkShrine.mp3` file are present.
 
 ### Pygame window issues
 Some environments (especially remote servers, headless systems, or restricted containers) may not support opening desktop windows directly.
@@ -277,7 +284,6 @@ Possible directions for expanding the project:
 - add difficulty presets such as beginner / intermediate / expert
 - add a hint button
 - color-code probabilities visually
-- add a true "solver mode" that plays automatically
 - save statistics from completed runs
 - add a tutorial mode explaining why a move is safe
 - turn the code into a cleaner educational demo for logic and probability
