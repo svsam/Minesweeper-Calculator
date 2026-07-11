@@ -1,15 +1,17 @@
+from pathlib import Path
+
 import pygame
+
 pygame.font.init()
 
-path = ''    # This should contain the path of where the game folder is
-Icon = pygame.image.load(path+'minesweeper/images/bombicon.png')
-pygame.display.set_icon(Icon)
-mine = pygame.image.load(path+'minesweeper/images/mine.png')
-flag = pygame.image.load(path+'minesweeper/images/flag.png')
-notpressed = pygame.image.load(path+'minesweeper/images/notpressed.png')
+image_path = Path(__file__).resolve().parent / 'images'
+Icon = pygame.image.load(str(image_path / 'bombicon.png'))
+mine = pygame.image.load(str(image_path / 'mine.png'))
+flag = pygame.image.load(str(image_path / 'flag.png'))
+notpressed = pygame.image.load(str(image_path / 'notpressed.png'))
 numbers = {}
 for i in range(9):
-    numbers[i] = pygame.image.load(path+f'minesweeper/images/type{i}.png')
+    numbers[i] = pygame.image.load(str(image_path / f'type{i}.png'))
 
 
 MAX_FPS = 60
@@ -44,7 +46,7 @@ def drawBoard(screen,board,mineboard,probboard,SQ_SIZE,status,display):
                     blitimage(screen,mine,r,c,SQ_SIZE,1,1)
                 else:
                     blitimage(screen, notpressed, r, c, SQ_SIZE, 1, 1)
-                    if display and probboard[r][c] != None:
+                    if display and probboard is not None and probboard[r][c] is not None:
                         blittext(screen,str(round(probboard[r][c]*100)), pygame.font.SysFont('Times New Roman',10),r,c,SQ_SIZE)
             elif type(val) == int:
                 blitimage(screen, numbers[val], r, c, SQ_SIZE,1,1)

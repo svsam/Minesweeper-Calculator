@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pygame
 import psutil  # For CPU usage monitoring
 from functions import *
@@ -9,6 +11,7 @@ pygame.init()
 WIDTHw, HEIGHTw = 1800, 960
 
 #display creation
+pygame.display.set_icon(Icon)
 screen = pygame.display.set_mode((WIDTHw, HEIGHTw))
 pygame.display.set_caption('Minesweeper')
 clock = pygame.time.Clock()
@@ -17,13 +20,13 @@ clock = pygame.time.Clock()
 HEIGHT = 11
 WIDTH = 10
 NUM_MINES = 20
+tileSize = 20
 
-boardScreen = pygame.Surface((WIDTHw//2, HEIGHTw//2))
-BOARD = genBoard(WIDTH, HEIGHT, NUM_MINES)   # The board which determines if there is a mine or not in each square
+boardScreen = pygame.Surface((WIDTH * tileSize, HEIGHT * tileSize))
+BOARD = genBoard(HEIGHT, WIDTH, NUM_MINES)   # The board which determines if there is a mine or not in each square
 BOARDVIEW = genKnownBoard(HEIGHT,WIDTH)      # The board that has what is shown to the player
 BOARDPROBABILITY = None                      # The board which contains the probability of each square having a bomb
 seen = []                                    # A list of the squares which have number 0 that have already been cleared
-tileSize = 20
 
 #colours
 WHITE = (255, 255, 255)
@@ -34,7 +37,7 @@ RED = (255, 0, 0)
 
 #music Initialization
 pygame.mixer.init()
-pygame.mixer.music.load("minesweeper\FirelinkShrine.mp3")
+pygame.mixer.music.load(str(Path(__file__).resolve().with_name('FirelinkShrine.mp3')))
 pygame.mixer.music.play(-1)  # Loop indefinitely
 music_on = True
 
@@ -69,19 +72,19 @@ def toggle_music():
         pygame.mixer.music.unpause()
         music_on = True
 
-def draw_fps_and_cpu():
+def draw_fps_and_cpu(x=10):
     """Displays the FPS and CPU usage on the screen."""
     font = pygame.font.SysFont('Arial', 18, bold=True)
     
     # FPS
     fps = f"FPS: {int(clock.get_fps())}"
     fps_surf = font.render(fps, True, BLACK)
-    screen.blit(fps_surf, (10, 10))  # Top-left corner
+    screen.blit(fps_surf, (x, 10))  # Top-left corner
     
     # CPU usage
     cpu_usage = f"CPU: {psutil.cpu_percent()}%"
     cpu_surf = font.render(cpu_usage, True, BLACK)
-    screen.blit(cpu_surf, (10, 40))  # Below the FPS
+    screen.blit(cpu_surf, (x, 40))  # Below the FPS
 
 def start():
     global music_on
@@ -114,23 +117,25 @@ def start():
         clock.tick(60)  # Keeps is at a maximum of 60 FPS
 
 def game():
+    global BOARD, BOARDVIEW, seen
+    BOARD = genBoard(HEIGHT, WIDTH, NUM_MINES)
+    BOARDVIEW = genKnownBoard(HEIGHT, WIDTH)
+    seen = []
+
     back_button = Button(WIDTHw - 120, 20, "Back", width=100)  #back button in the top-right corner
     num_flag = 0
     lost = False      #whether the game has been lost or not
     display = False   #whether the probabilities are shown or not
     boardProbability = None
     while True:
-        drawBoard(boardScreen, BOARDVIEW, BOARD, boardProbability, tileSize, lost, display)
-
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 exit()
 
-
             if event.type == pygame.MOUSEBUTTONDOWN:
-                            if back_button.get_button().collidepoint(event.pos):
-                                running = False  # start screen
+                if back_button.get_button().collidepoint(event.pos):
+                    return  # start screen
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_p:
@@ -141,7 +146,7 @@ def game():
 
                 elif event.key == pygame.K_l:
                     display = False
-                elif event.key == pygame.K_c:
+                elif event.key == pygame.K_c and boardProbability is not None:
                     # Flags and clear the squares that are certainly mines or not
                     for y,row in enumerate(boardProbability):
                         for x,cell in enumerate(row):
@@ -158,17 +163,19 @@ def game():
                     cleanboard(BOARDVIEW,BOARD,seen)
 
             if event.type == pygame.MOUSEBUTTONDOWN and not lost:
-                location = pygame.mouse.get_pos()
+                location = event.pos
                 col = location[0] // tileSize
                 row = location[1] // tileSize
+                if not (0 <= row < HEIGHT and 0 <= col < WIDTH):
+                    continue
                 if event.button == 1:
-                    if BOARD[row][col] == 1:
-                        if BOARDVIEW[row][col] != 'B':
+                    if BOARDVIEW[row][col] is None:
+                        if BOARD[row][col] == 1:
                             print("It was a mine!")
                             lost = True
-                    else:
-                        BOARDVIEW[row][col] = squareNum((row,col),BOARD)
-                        cleanboard(BOARDVIEW,BOARD,seen)
+                        else:
+                            BOARDVIEW[row][col] = squareNum((row,col),BOARD)
+                            cleanboard(BOARDVIEW,BOARD,seen)
                 elif event.button == 3:
                     if BOARDVIEW[row][col] == None:
                         BOARDVIEW[row][col] = 'B'
@@ -179,13 +186,15 @@ def game():
                         num_flag -= 1
                         print("Number of flags:", num_flag)
 
-            screen.fill(RED)  # Background colour
+        screen.fill(RED)  # Background colour
+        drawBoard(boardScreen, BOARDVIEW, BOARD, boardProbability, tileSize, lost, display)
+        screen.blit(boardScreen, (0, 0))
 
-            back_button.draw()
-            draw_fps_and_cpu()  # Draw FPS and CPU usage
+        back_button.draw()
+        draw_fps_and_cpu(WIDTH * tileSize + 10)  # Draw FPS and CPU usage
 
-            pygame.display.flip()
-            clock.tick(60)  # Keeps is at a maximum of 60 FPS
+        pygame.display.flip()
+        clock.tick(60)  # Keeps is at a maximum of 60 FPS
 
 def options():
     back_button = Button(WIDTHw - 120, 20, "Back", width=100)  # Back button in the top-right corner
@@ -219,18 +228,8 @@ def draw_title():
 start_button = Button((WIDTHw - 200) // 2, 200, "Start", width=200)
 option_button = Button((WIDTHw - 200) // 2, 300, "Options", width=200)
 quit_button = Button((WIDTHw - 200) // 2, 400, "Quit", width=200)
-music_button = Button(WIDTHw - 150, HEIGHT - 80, "Music", width=130)
+music_button = Button(WIDTHw - 150, HEIGHTw - 80, "Music", width=130)
 
 #main loop
-while True:
-    for event in pygame.event.get():  # Event handling
-        if event.type == pygame.QUIT:
-            pygame.quit()
-            exit()
-
-    running = start()
-
-    pygame.display.flip()
-    clock.tick(60)  # Keeps at a maximum of 60 FPS
-
-    pygame.quit()
+if __name__ == '__main__':
+    start()

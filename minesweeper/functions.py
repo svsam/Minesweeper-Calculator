@@ -1,21 +1,18 @@
 import sympy
-from random import randint
+from random import sample
 import itertools
 import math
 import copy
 
 #generates a board and populates it with mines
 def genBoard(height, width, numberOfMines):
-    board = []
-    for _ in range(height):
-        board.append([0] * width)
+    if not 0 <= numberOfMines <= height * width:
+        raise ValueError('numberOfMines must fit within the board')
 
-    for mines in range(numberOfMines):
-        ypos = randint(0, height-1)
-        xpos = randint(0, width-1)
-
-        if board[ypos][xpos] != 1:
-            board[ypos][xpos] = 1
+    board = [[0] * width for _ in range(height)]
+    for position in sample(range(height * width), numberOfMines):
+        ypos, xpos = divmod(position, width)
+        board[ypos][xpos] = 1
     return board
 
 #generates the initial state of what the player can see of the board
@@ -127,32 +124,26 @@ def calcprobs(board,rem_mines):
         prev = copy.deepcopy(newBoard)
         for y, row in enumerate(board):
             for x, cell in enumerate(row):
-                if type(cell) == int:
-                    if cell > 0:
-                        surroundingSquare = cSurroundingTiles((y, x), board) # list of surrounding tiles
-                        # 1.0 or 0.0 means a 100% or 0% of a mine being present here
-                        noneSquare = [x for x in surroundingSquare # for every coordinate that is either None or a mine place in noneSquare
-                                        if board[x[0]][x[1]] == (None or board[x[0]][x[1]] == '1')]
-                        
-                        square100 = [x for x in noneSquare # for every coordinate in the new board with a value of 1 or if the adjacent gameboard has a mine append
-                                    if newBoard[x[0]][x[1]] == (1.0 or board[x[0]][x[1]] == '1')]
-                        
-                        square0 = [x for x in noneSquare # for every coordinate in the new board that is checked
-                                    if newBoard[x[0]][x[1]] == 0.0]
-                        
-                        if len(noneSquare) == cell:
-                            for square in noneSquare:
-                                newBoard[square[0]][square[1]] = 1.0 # checks if the number of "unknown" cells is exactly equal to cell.
+                if type(cell) is int:
+                    surroundingSquare = cSurroundingTiles((y, x), board)
+                    known_mines = [
+                        square for square in surroundingSquare
+                        if board[square[0]][square[1]] == 'B'
+                        or newBoard[square[0]][square[1]] == 1.0
+                    ]
+                    unknown_squares = [
+                        square for square in surroundingSquare
+                        if board[square[0]][square[1]] is None
+                        and newBoard[square[0]][square[1]] is None
+                    ]
+                    remaining_mines = cell - len(known_mines)
 
-                        elif len(square100) == cell:
-                            for square in [x for x in surroundingSquare 
-                                        if x not in square100]:
-                                newBoard[square[0]][square[1]] = 0.0 # checks if the number of cells already assigned 1.0 (square100) is exactly equal to cell.
-
-                        elif len(noneSquare) - len(square0) == cell:
-                            for square in [x for x in noneSquare 
-                                        if x not in square0]:
-                                newBoard[square[0]][square[1]] = 1.0 # checks if the difference between the number of "unknown" cells and the number of cells already assigned 0.0 is exactly equal to cell.
+                    if remaining_mines == len(unknown_squares):
+                        for square in unknown_squares:
+                            newBoard[square[0]][square[1]] = 1.0
+                    elif remaining_mines == 0:
+                        for square in unknown_squares:
+                            newBoard[square[0]][square[1]] = 0.0
 
 
     #uses groups and set ideas to determine which squares must have mines or not. 
@@ -161,12 +152,12 @@ def calcprobs(board,rem_mines):
     #get unknown (unrevealed and unflagged) tiles around a given square
     def get_unknowns_around(pos):
         return [pt for pt in cSurroundingTiles(pos, board)
-                if board[pt[0]][pt[1]] is None and not isinstance(board[pt[0]][pt[1]], float)]
+                if board[pt[0]][pt[1]] is None and not isinstance(newBoard[pt[0]][pt[1]], float)]
 
     #get surrounding tiles that are already identified as mines (flagged or marked as float 1.0)
     def get_mines_around(pos):
         return [pt for pt in cSurroundingTiles(pos, board)
-                if board[pt[0]][pt[1]] == '1' or (isinstance(board[pt[0]][pt[1]], float) and board[pt[0]][pt[1]] == 1.0)]
+                if board[pt[0]][pt[1]] == 'B' or newBoard[pt[0]][pt[1]] == 1.0]
 
     #get how many mines are still unaccounted for around a number-tile
     def get_value(pos):
@@ -178,7 +169,8 @@ def calcprobs(board,rem_mines):
     border_squares = [
         (y, x) for y in range(height) for x in range(width)
         if isinstance(board[y][x], int) and board[y][x] > 0 and
-        any(board[ny][nx] is None for ny, nx in cSurroundingTiles((y, x), board))
+        any(board[ny][nx] is None and not isinstance(newBoard[ny][nx], float)
+            for ny, nx in cSurroundingTiles((y, x), board))
     ]
 
     #step 2: For each border square, compare it with neighboring border squares
@@ -186,25 +178,25 @@ def calcprobs(board,rem_mines):
         sqr_val = get_value(sqr)               #how many mines remain around this square
         sur_unknown = get_unknowns_around(sqr) #unknown neighbors around this square
 
-    for adj_sqr in cSurroundingTiles(sqr, board):
-        if adj_sqr not in border_squares:
-            continue  #only compare to other border squares
+        for adj_sqr in cSurroundingTiles(sqr, board):
+            if adj_sqr not in border_squares:
+                continue  #only compare to other border squares
 
-        adj_val = get_value(adj_sqr)               #remaining mines around adjacent square
-        adj_unknown = get_unknowns_around(adj_sqr) #unknowns around adjacent square
+            adj_val = get_value(adj_sqr)               #remaining mines around adjacent square
+            adj_unknown = get_unknowns_around(adj_sqr) #unknowns around adjacent square
 
-        # Calculate the "extra" unknowns that only belong to one of the two sets
-        only_adj = [pt for pt in adj_unknown if pt not in sur_unknown]
-        only_sqr = [pt for pt in sur_unknown if pt not in adj_unknown]
+            # Calculate the "extra" unknowns that only belong to one of the two sets
+            only_adj = [pt for pt in adj_unknown if pt not in sur_unknown]
+            only_sqr = [pt for pt in sur_unknown if pt not in adj_unknown]
 
-        # Logic deduction:
-        # If the difference in required mines equals the number of unique unknowns,
-        # then those unique unknowns **must** be mines, and the others are safe.
-        if adj_val - sqr_val == len(only_adj):
-            for pt in only_adj:
-                newBoard[pt[0]][pt[1]] = 1.0  #definitely a mine
-            for pt in only_sqr:
-                newBoard[pt[0]][pt[1]] = 0.0  #definitely safe 
+            # Logic deduction:
+            # If the difference in required mines equals the number of unique unknowns,
+            # then those unique unknowns **must** be mines, and the others are safe.
+            if adj_val - sqr_val == len(only_adj):
+                for pt in only_adj:
+                    newBoard[pt[0]][pt[1]] = 1.0  #definitely a mine
+                for pt in only_sqr:
+                    newBoard[pt[0]][pt[1]] = 0.0  #definitely safe
 
     #gets all border squares which still are not known to be mines or not
     borderSquares = []
@@ -230,7 +222,7 @@ def calcprobs(board,rem_mines):
                     equation = [0] * (len(borderSquares) + 1)
                     for sqr in [x for x in cSurroundingTiles((y, x), board) if board[x[0]][x[1]] == None and type(newBoard[x[0]][x[1]])!=float]:
                         equation[borderSquares.index(sqr)] = 1
-                    equation[-1] = cell - len([x for x in cSurroundingTiles((y,x),board) if board[x[0]][x[1]] == '1' or newBoard[x[0]][x[1]] == 1.0])
+                    equation[-1] = cell - len([x for x in cSurroundingTiles((y,x),board) if board[x[0]][x[1]] == 'B' or newBoard[x[0]][x[1]] == 1.0])
                     equation_matrix.append(equation)
 
     # The squares that are not a border square and are not a cleared square
@@ -243,24 +235,18 @@ def calcprobs(board,rem_mines):
     # Proceeds with solving the linear system if there are unknown squares probabilities at all
     if len(borderSquares) > 0:
         # Names each border square with a1, a2, ...
-        symbolstr = ''
-        for i in range(len(borderSquares)):
-            symbolstr += f'a{i}, '
-        symbolstr = symbolstr[:-2]
-        variables = sympy.symbols(symbolstr)
+        variables = sympy.symbols(f'a0:{len(borderSquares)}')
 
         # Solves the system
-        solution = sympy.linsolve(sympy.Matrix(equation_matrix),variables).args[0]
+        solution_set = sympy.linsolve(sympy.Matrix(equation_matrix), variables)
+        if solution_set is sympy.EmptySet:
+            print("The current flags are inconsistent with the revealed squares")
+            return newBoard
+        solution = next(iter(solution_set))
 
         # Determines what are the parameters of the solution
-        parameters = []
-        for i in range(len(borderSquares)):
-            if solution.args[i] == variables[i]:
-                parameters.append(variables[i])
+        parameters = [variable for variable in variables if variable in solution.free_symbols]
         print("Number of parameters", len(parameters))
-
-        # The terms of each expression in the solution which are constants (For example, if an expression is a1+a2-2, then -2 is  the constant)
-        constants = solution.subs(list(zip(parameters, [0] * len(parameters))))
 
         # Separates the solution in groups that are independent between each other
         groups = gen_groups(solution,parameters)
@@ -270,21 +256,13 @@ def calcprobs(board,rem_mines):
         for i in range(len(groups)+1):
             eq_groups.append([])
         eq_groups_num = []  # This is the number of the group that each expression in the solution belongs
-        for i,eq in enumerate(solution):
-            num = None
+        for eq in solution:
+            num = len(groups)
             for j,group in enumerate(groups):
-                for par in group:
-                    if eq.coeff(par) != 0:
-                        eq_groups[j].append(eq)
-                        num = j
-                        break
-                    elif eq==constants[i]:
-                        num = len(groups)
-                        eq_groups[num].append(eq)
-                        break
-                else:
-                    continue
-                break
+                if any(eq.coeff(par) != 0 for par in group):
+                    num = j
+                    break
+            eq_groups[num].append(eq)
             eq_groups_num.append(num)
 
         # Sorts the border_sqrs and solution lists such that the first part correponds to the first group, the 2nd to the 2nd and so on
@@ -322,7 +300,7 @@ def calcprobs(board,rem_mines):
             problist = [0]*len(borderSquares)             # The probabilities of each respective border square having a mine
             unbordered_prob = 0                         # The probability of each unbordered square having a mine
             total = 0                                   # Total number of possible states of mines
-            num_possibilities = 0                       # counts the number of possible states of the bordered squares
+            unbordered_mine_weight = 0                  # weighted mine count across unbordered squares
 
             # Generates every possible combination of all the possible solutions for each group
             for c in itertools.product(*[list(range(len(x))) for x in alleq_groups]):
@@ -330,33 +308,42 @@ def calcprobs(board,rem_mines):
                 for x in [alleq_groups[i][j] for i, j in enumerate(c)]:
                     result = result + x   # Because the border squares were sorted based on the group number, the group possible solutions can just be summed to the list
 
-                val = sum(result)
-                if val <= rem_mines - alreadyFoundMines:  # The number of mines in the current possible solution can't be bigger than the number of remaining mines
+                val = int(sum(result))
+                remaining_unbordered = rem_mines - val - alreadyFoundMines
+                if 0 <= remaining_unbordered <= len(unbordered_sqrs):
                     if val not in numberOfPossibilities:
-                        numberOfPossibilities[val] = math.comb(len(unbordered_sqrs), rem_mines - val - alreadyFoundMines)
+                        numberOfPossibilities[val] = math.comb(len(unbordered_sqrs), remaining_unbordered)
                     total += numberOfPossibilities[val]
-                    unbordered_prob += (rem_mines - val - alreadyFoundMines)
-                    num_possibilities += 1
+                    unbordered_mine_weight += remaining_unbordered * numberOfPossibilities[val]
                     for i, x in enumerate(result):
                         problist[i] += x * numberOfPossibilities[val]
 
-            problist = [x/total for x in problist]
-            if len(unbordered_sqrs) > 0:
-                unbordered_prob /= num_possibilities*len(unbordered_sqrs)
-            # Substitutes each found probability to the probability board
-            for i,sqr in enumerate(borderSquares):
-                newBoard[sqr[0]][sqr[1]] = problist[i]
-            for i,sqr in enumerate(unbordered_sqrs):
-                newBoard[sqr[0]][sqr[1]] = unbordered_prob
+            if total > 0:
+                problist = [x/total for x in problist]
+                if len(unbordered_sqrs) > 0:
+                    unbordered_prob = unbordered_mine_weight / (total * len(unbordered_sqrs))
+                # Substitutes each found probability to the probability board
+                for i,sqr in enumerate(borderSquares):
+                    newBoard[sqr[0]][sqr[1]] = problist[i]
+                for sqr in unbordered_sqrs:
+                    newBoard[sqr[0]][sqr[1]] = unbordered_prob
+            else:
+                print("No mine placements match the current board and flag count")
         else:
             # In case there were too many parameters, at least some squares are definitely mines because the
             # solution of the linear system gave that they are constants 1 or 0
             for i in range(len(borderSquares)):
-                if solution.args[i] == sympy.core.numbers.Zero:
+                if solution[i] == sympy.core.numbers.Zero:
                     newBoard[borderSquares[i][0]][borderSquares[i][1]] = 0.0
-                elif solution.args[i] == sympy.core.numbers.One:
+                elif solution[i] == sympy.core.numbers.One:
                     newBoard[borderSquares[i][0]][borderSquares[i][1]] = 1.0
             print("The probability calculations were not completed because there were too many parameters")
     else:
+        alreadyFoundMines = sum(cell == 1.0 for row in newBoard for cell in row)
+        remaining_mines = rem_mines - alreadyFoundMines
+        if unbordered_sqrs and 0 <= remaining_mines <= len(unbordered_sqrs):
+            probability = remaining_mines / len(unbordered_sqrs)
+            for y, x in unbordered_sqrs:
+                newBoard[y][x] = probability
         print("The linear system method wasn't needed")
     return(newBoard)
